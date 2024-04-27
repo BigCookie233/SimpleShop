@@ -18,11 +18,11 @@ public class ProductService {
 
     // 根据 UUID 查找商品
     public Product findProductByUuid(UUID uuid) {
-        return productRepository.findByUuid(uuid);
+        return this.productRepository.findByUuid(uuid);
     }
 
     // 保存商品到数据库
     public void saveProduct(Product product) {
-        productRepository.save(product);
+        this.productRepository.save(product);
     }
 }

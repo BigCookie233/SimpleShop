@@ -7,6 +7,7 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Collections;
@@ -24,30 +25,25 @@ public class ApiAdapter {
     }
 
     public static String buildSortedQueryString(Map<String, String> params) {
-        // 筛选参数并排序
         Map<String, String> sortedParams = new TreeMap<>(params);
 
-        // 拼接参数
-        StringBuilder queryString = new StringBuilder();
+        UriComponentsBuilder builder = UriComponentsBuilder.newInstance();
         for (Map.Entry<String, String> entry : sortedParams.entrySet()) {
-            if (queryString.length() > 0) {
-                queryString.append("&");
-            }
-            queryString.append(entry.getKey()).append("=").append(entry.getValue());
+            builder.queryParam(entry.getKey(), entry.getValue());
         }
 
-        return queryString.toString();
+        return builder.build().toUriString().substring(1);
     }
 
-    public static String getSign(Map<String, String> params) {
+    public static String getSign(Map<String, String> params, String key) {
         String preSign = buildSortedQueryString(params);
-        return calculateMD5(preSign);
+        return calculateMD5(preSign+key);
     }
 
     public static String calculateMD5(String input) {
         try {
             MessageDigest md = MessageDigest.getInstance("MD5");
-            byte[] digest = md.digest(input.getBytes());
+            byte[] digest = md.digest(input.getBytes(StandardCharsets.UTF_8));
 
             // Convert the byte array to a hexadecimal string
             StringBuilder hexString = new StringBuilder();
@@ -73,10 +69,8 @@ public class ApiAdapter {
         params.put("return_url", apiProperties.hostUrl);
         params.put("name", name);
         params.put("money", String.valueOf(amount));
-        params.put("sign", getSign(params));
+        params.put("sign", getSign(params, apiProperties.key));
         params.put("sign_type", "MD5");
-        HttpHeaders headers = new HttpHeaders();
-        headers.set(HttpHeaders.ACCEPT, "application/json");
         return getEncodedUrl(params);
     }
 
@@ -86,10 +80,9 @@ public class ApiAdapter {
             multiValueMap.put(entry.getKey(), Collections.singletonList(entry.getValue()));
         }
         // Build the URL with encoded query parameters
-        String url = UriComponentsBuilder.fromHttpUrl(apiProperties.apiUrl)
+        return UriComponentsBuilder.fromHttpUrl(apiProperties.apiUrl)
                 .queryParams(multiValueMap)
                 .encode() // Encode special characters
                 .toUriString();
-        return url;
     }
 }
