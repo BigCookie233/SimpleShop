@@ -8,6 +8,8 @@ import io.github.bigcookie233.simpleshop.entities.TransactionStatus;
 import io.github.bigcookie233.simpleshop.services.ProductService;
 import io.github.bigcookie233.simpleshop.services.TransactionService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -33,16 +35,19 @@ public class TransactionController {
         this.apiProperties = apiProperties;
     }
 
-    @GetMapping("/create-transaction")
+    @GetMapping("create-transaction")
     public RedirectView createTransaction(@RequestParam("productUuid") String productUuid,
                                           @RequestParam("amount") int amount,
                                           @RequestParam("paymentMethod") String paymentMethod,
                                           @RequestParam("minecraftId") String minecraftId) {
         Product product = this.productService.findProductByUuid(UUID.fromString(productUuid));
-        Transaction transaction = new Transaction(product, product.getPrice() * amount);
-        this.transactionService.saveTransaction(transaction);
-//        return new RedirectView(this.apiAdapter.getPayLink(payment.id, paymentMethod, product.name, payment.amount));
-        return new RedirectView("/");
+        if (validateMinecraftId(minecraftId)) {
+            Transaction transaction = new Transaction(product, product.getPrice() * amount, minecraftId);
+            this.transactionService.saveTransaction(transaction);
+            return new RedirectView(this.apiAdapter.getPayLink(transaction.getTransactionId(), paymentMethod, product.getName(), transaction.getAmount()));
+        } else {
+            return null;
+        }
     }
 
     @GetMapping("complete-transaction")
@@ -65,22 +70,63 @@ public class TransactionController {
         params.put("money", money);
         params.put("trade_status", trade_status);
         Transaction transaction = this.transactionService.findTransactionByTransactionId(transactionId);
-        if (transaction.getStatus() == TransactionStatus.PENDING) {
-            if (!sign_type.equalsIgnoreCase("md5")) {
+        if (!sign_type.equalsIgnoreCase("md5") ||
+                transaction.getStatus() != TransactionStatus.PENDING) {
+            transaction.setStatus(TransactionStatus.ERROR);
+        } else {
+            String correct_sign = ApiAdapter.getSign(params, apiProperties.key);
+            if (!sign.equals(correct_sign) || !trade_status.equals("TRADE_SUCCESS")) {
                 transaction.setStatus(TransactionStatus.ERROR);
             } else {
-                String correct_sign = ApiAdapter.getSign(params, apiProperties.key);
-                if (!sign.equals(correct_sign)) {
-                    transaction.setStatus(TransactionStatus.ERROR);
-                } else if (trade_status.equals("TRADE_SUCCESS")) {
-                    transaction.setStatus(TransactionStatus.SUCCESS);
-                } else {
-                    transaction.setStatus(TransactionStatus.ERROR);
-                }
+                transaction.setStatus(TransactionStatus.SUCCESS);
             }
         }
         this.transactionService.saveTransaction(transaction);
         model.addAttribute("transaction", transaction);
         return "complete";
+    }
+
+    @GetMapping("notify-transaction")
+    public ResponseEntity<String> notifyTransaction(@RequestParam("pid") String pid,
+                                                    @RequestParam("trade_no") String trade_no,
+                                                    @RequestParam("out_trade_no") String transactionId,
+                                                    @RequestParam("type") String type,
+                                                    @RequestParam("name") String name,
+                                                    @RequestParam("money") String money,
+                                                    @RequestParam("trade_status") String trade_status,
+                                                    @RequestParam("sign") String sign,
+                                                    @RequestParam("sign_type") String sign_type) {
+        Map<String, String> params = new TreeMap<>();
+        params.put("pid", pid);
+        params.put("trade_no", trade_no);
+        params.put("out_trade_no", transactionId);
+        params.put("type", type);
+        params.put("name", name);
+        params.put("money", money);
+        params.put("trade_status", trade_status);
+        Transaction transaction = this.transactionService.findTransactionByTransactionId(transactionId);
+        if (!sign_type.equalsIgnoreCase("md5") ||
+                transaction.getStatus() != TransactionStatus.PENDING) {
+            transaction.setStatus(TransactionStatus.ERROR);
+        } else {
+            String correct_sign = ApiAdapter.getSign(params, apiProperties.key);
+            if (!sign.equals(correct_sign) || !trade_status.equals("TRADE_SUCCESS")) {
+                transaction.setStatus(TransactionStatus.ERROR);
+            } else {
+                transaction.setStatus(TransactionStatus.SUCCESS);
+            }
+        }
+        this.transactionService.saveTransaction(transaction);
+        return ResponseEntity.status(HttpStatus.NO_CONTENT).body(null);
+    }
+
+    public static boolean validateMinecraftId(String id) {
+        // 检查字符串长度是否小于 16
+        if (id.length() >= 16) {
+            return false;
+        }
+
+        // 检查字符串是否仅包含英文字母、数字和下划线
+        return id.matches("^[a-zA-Z0-9_]+$");
     }
 }

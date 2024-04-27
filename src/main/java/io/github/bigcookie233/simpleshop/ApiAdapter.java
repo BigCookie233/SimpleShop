@@ -65,8 +65,8 @@ public class ApiAdapter {
         params.put("pid", apiProperties.pid);
         params.put("type", paymentMethod);
         params.put("out_trade_no", paymentId);
-        params.put("notify_url", apiProperties.hostUrl);
-        params.put("return_url", apiProperties.hostUrl);
+        params.put("notify_url", apiProperties.hostUrl+"/notify-transaction");
+        params.put("return_url", apiProperties.hostUrl+"/complete-transaction");
         params.put("name", name);
         params.put("money", String.valueOf(amount));
         params.put("sign", getSign(params, apiProperties.key));

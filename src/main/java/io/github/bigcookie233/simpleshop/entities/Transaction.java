@@ -14,14 +14,20 @@ public class Transaction {
     private double amount;
     @Enumerated(EnumType.STRING)
     private TransactionStatus status;
+    private String minecraftId;
 
     public Transaction() {
     }
 
-    public Transaction(Product product, double amount) {
+    public Transaction(Product product, double amount, String minecraftId) {
         this.product = product;
         this.amount = amount;
+        this.minecraftId = minecraftId;
         this.status = TransactionStatus.PENDING;
+    }
+
+    public String getMinecraftId() {
+        return minecraftId;
     }
 
     public String getTransactionId() {
