@@ -1,10 +1,11 @@
 package io.github.bigcookie233.simpleshop.controllers;
 
 import io.github.bigcookie233.simpleshop.ApiAdapter;
-import io.github.bigcookie233.simpleshop.ApiProperties;
+import io.github.bigcookie233.simpleshop.entities.Action;
 import io.github.bigcookie233.simpleshop.entities.Product;
 import io.github.bigcookie233.simpleshop.entities.Transaction;
 import io.github.bigcookie233.simpleshop.entities.TransactionStatus;
+import io.github.bigcookie233.simpleshop.services.ConfigurablePropertyService;
 import io.github.bigcookie233.simpleshop.services.ProductService;
 import io.github.bigcookie233.simpleshop.services.TransactionService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,14 +26,14 @@ public class TransactionController {
     private ProductService productService;
     private TransactionService transactionService;
     private ApiAdapter apiAdapter;
-    private ApiProperties apiProperties;
+    private ConfigurablePropertyService configurablePropertyService;
 
     @Autowired
-    public TransactionController(ProductService productService, TransactionService transactionService, ApiAdapter apiAdapter, ApiProperties apiProperties) {
+    public TransactionController(ProductService productService, TransactionService transactionService, ApiAdapter apiAdapter, ConfigurablePropertyService configurablePropertyService) {
         this.productService = productService;
         this.transactionService = transactionService;
         this.apiAdapter = apiAdapter;
-        this.apiProperties = apiProperties;
+        this.configurablePropertyService = configurablePropertyService;
     }
 
     @GetMapping("create-transaction")
@@ -70,24 +71,13 @@ public class TransactionController {
         params.put("money", money);
         params.put("trade_status", trade_status);
         Transaction transaction = this.transactionService.findTransactionByTransactionId(transactionId);
-        if (!sign_type.equalsIgnoreCase("md5") ||
-                transaction.getStatus() != TransactionStatus.PENDING) {
-            transaction.setStatus(TransactionStatus.ERROR);
-        } else {
-            String correct_sign = ApiAdapter.getSign(params, apiProperties.key);
-            if (!sign.equals(correct_sign) || !trade_status.equals("TRADE_SUCCESS")) {
-                transaction.setStatus(TransactionStatus.ERROR);
-            } else {
-                transaction.setStatus(TransactionStatus.SUCCESS);
-            }
-        }
-        this.transactionService.saveTransaction(transaction);
+        processTransaction(transaction, sign_type, sign, trade_status, params);
         model.addAttribute("transaction", transaction);
-        return "complete";
+        return "complete-transaction";
     }
 
-    @GetMapping("notify-transaction")
-    public ResponseEntity<String> notifyTransaction(@RequestParam("pid") String pid,
+    @GetMapping("update-transaction")
+    public ResponseEntity<String> updateTransaction(@RequestParam("pid") String pid,
                                                     @RequestParam("trade_no") String trade_no,
                                                     @RequestParam("out_trade_no") String transactionId,
                                                     @RequestParam("type") String type,
@@ -105,28 +95,39 @@ public class TransactionController {
         params.put("money", money);
         params.put("trade_status", trade_status);
         Transaction transaction = this.transactionService.findTransactionByTransactionId(transactionId);
-        if (!sign_type.equalsIgnoreCase("md5") ||
-                transaction.getStatus() != TransactionStatus.PENDING) {
-            transaction.setStatus(TransactionStatus.ERROR);
-        } else {
-            String correct_sign = ApiAdapter.getSign(params, apiProperties.key);
-            if (!sign.equals(correct_sign) || !trade_status.equals("TRADE_SUCCESS")) {
-                transaction.setStatus(TransactionStatus.ERROR);
-            } else {
-                transaction.setStatus(TransactionStatus.SUCCESS);
-            }
-        }
-        this.transactionService.saveTransaction(transaction);
+        processTransaction(transaction, sign_type, sign, trade_status, params);
         return ResponseEntity.status(HttpStatus.NO_CONTENT).body(null);
     }
 
     public static boolean validateMinecraftId(String id) {
         // 检查字符串长度是否小于 16
-        if (id.length() >= 16) {
+        if (id.length() < 3 || id.length() >= 16) {
             return false;
         }
 
         // 检查字符串是否仅包含英文字母、数字和下划线
         return id.matches("^[a-zA-Z0-9_]+$");
+    }
+
+    private void processTransaction(Transaction transaction, String sign_type, String sign, String trade_status, Map<String, String>params) {
+        if (transaction.getStatus() == TransactionStatus.PENDING) {
+            if (!sign_type.equalsIgnoreCase("md5") || !sign.equals(ApiAdapter.getSign(params, configurablePropertyService.findPropertyByName("key").value))) {
+                transaction.setStatus(TransactionStatus.ERROR);
+            } else {
+                if (!trade_status.equals("TRADE_SUCCESS")) {
+                    transaction.setStatus(TransactionStatus.FAILED);
+                } else {
+                    try {
+                        Action action = new Action(configurablePropertyService.findPropertyByName("remote_uuid").value, configurablePropertyService.findPropertyByName("uuid").value, transaction.getProduct().getAction());
+                        action.buildCommand(transaction.getMinecraftId());
+                        this.apiAdapter.executeCommand(action);
+                        transaction.setStatus(TransactionStatus.SUCCESS);
+                    } catch (Exception e) {
+                        transaction.setStatus(TransactionStatus.ERROR);
+                    }
+                }
+            }
+            this.transactionService.saveTransaction(transaction);
+        }
     }
 }

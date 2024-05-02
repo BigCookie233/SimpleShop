@@ -11,10 +11,6 @@ public class Payment {
         this.amount = amount;
     }
 
-    public void submit() {
-        this.id = generateOrderNumber();
-    }
-
     private static String generateRandomPart(int length) {
         StringBuilder randomPart = new StringBuilder();
         for (int i = 0; i < length; i++) {

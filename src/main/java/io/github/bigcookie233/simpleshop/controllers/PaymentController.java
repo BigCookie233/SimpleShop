@@ -20,7 +20,7 @@ public class PaymentController {
         this.productService = productService;
     }
 
-    @GetMapping("/create")
+    @GetMapping("/create-order")
     public String create(Model model, @RequestParam("productUuid") String productUuid, @RequestParam("amount") int amount, @RequestParam("minecraftId") String minecraftId) {
         Product product = this.productService.findProductByUuid(UUID.fromString(productUuid));
         Payment payment = new Payment(amount * product.getPrice());
@@ -28,6 +28,6 @@ public class PaymentController {
         model.addAttribute("payment", payment);
         model.addAttribute("minecraft_id", minecraftId);
         model.addAttribute("amount", amount);
-        return "create";
+        return "create-order";
     }
 }

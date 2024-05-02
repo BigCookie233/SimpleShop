@@ -14,6 +14,7 @@ public class Product {
     private UUID uuid;
     private String name;
     private double price;
+    private String action;
 
     public Product() {
     }
@@ -33,5 +34,9 @@ public class Product {
 
     public UUID getUuid() {
         return uuid;
+    }
+
+    public String getAction() {
+        return action;
     }
 }

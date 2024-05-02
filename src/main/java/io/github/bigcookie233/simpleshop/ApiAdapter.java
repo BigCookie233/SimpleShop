@@ -1,7 +1,9 @@
 package io.github.bigcookie233.simpleshop;
 
+import io.github.bigcookie233.simpleshop.entities.Action;
+import io.github.bigcookie233.simpleshop.services.ConfigurablePropertyService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpHeaders;
+import org.springframework.http.*;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
@@ -15,13 +17,11 @@ import java.util.Map;
 import java.util.TreeMap;
 
 public class ApiAdapter {
-    private final RestTemplate restTemplate;
-    private final ApiProperties apiProperties;
+    private final ConfigurablePropertyService configurablePropertyService;
 
     @Autowired
-    public ApiAdapter(RestTemplate restTemplate, ApiProperties apiProperties) {
-        this.restTemplate = restTemplate;
-        this.apiProperties = apiProperties;
+    public ApiAdapter(ConfigurablePropertyService configurablePropertyService) {
+        this.configurablePropertyService = configurablePropertyService;
     }
 
     public static String buildSortedQueryString(Map<String, String> params) {
@@ -62,14 +62,14 @@ public class ApiAdapter {
 
     public String getPayLink(String paymentId, String paymentMethod, String name, double amount) {
         Map<String, String> params = new TreeMap<>();
-        params.put("pid", apiProperties.pid);
+        params.put("pid", configurablePropertyService.findPropertyByName("pid").value);
         params.put("type", paymentMethod);
         params.put("out_trade_no", paymentId);
-        params.put("notify_url", apiProperties.hostUrl+"/notify-transaction");
-        params.put("return_url", apiProperties.hostUrl+"/complete-transaction");
+        params.put("notify_url", configurablePropertyService.findPropertyByName("host_url").value+"/update-transaction");
+        params.put("return_url", configurablePropertyService.findPropertyByName("host_url").value+"/complete-transaction");
         params.put("name", name);
         params.put("money", String.valueOf(amount));
-        params.put("sign", getSign(params, apiProperties.key));
+        params.put("sign", getSign(params, configurablePropertyService.findPropertyByName("key").value));
         params.put("sign_type", "MD5");
         return getEncodedUrl(params);
     }
@@ -80,9 +80,23 @@ public class ApiAdapter {
             multiValueMap.put(entry.getKey(), Collections.singletonList(entry.getValue()));
         }
         // Build the URL with encoded query parameters
-        return UriComponentsBuilder.fromHttpUrl(apiProperties.apiUrl)
+        return UriComponentsBuilder.fromHttpUrl(configurablePropertyService.findPropertyByName("api_url").value)
                 .queryParams(multiValueMap)
                 .encode() // Encode special characters
                 .toUriString();
+    }
+
+    public void executeCommand(Action action) {
+        RestTemplate restTemplate = new RestTemplate();
+        String url = UriComponentsBuilder.fromHttpUrl(configurablePropertyService.findPropertyByName("mcsm_url").value)
+                .queryParam("remote_uuid", action.getRemoteUuid())
+                .queryParam("uuid", action.getUuid())
+                .queryParam("apikey", configurablePropertyService.findPropertyByName("api_key").value)
+                .queryParam("command", action.getCommand())
+                .encode()
+                .toUriString().replace("%20", "+");
+        HttpHeaders headers = new HttpHeaders();
+        HttpEntity<?> requestEntity = new HttpEntity<>(headers);
+        ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, requestEntity, String.class);
     }
 }

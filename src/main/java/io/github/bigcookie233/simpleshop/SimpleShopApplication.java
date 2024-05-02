@@ -12,8 +12,7 @@ public class SimpleShopApplication {
 		SpringApplication.run(new Class[]{
 				SimpleShopApplication.class,
 				SecurityConfig.class,
-				ApiConfig.class,
-				ApiProperties.class
+				ApiConfig.class
 		}, args);
 	}
 
