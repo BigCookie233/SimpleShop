@@ -16,6 +16,7 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.view.RedirectView;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.util.Map;
 import java.util.TreeMap;
@@ -36,6 +37,16 @@ public class TransactionController {
         this.configurablePropertyService = configurablePropertyService;
     }
 
+    public static boolean validateMinecraftId(String id) {
+        // 检查字符串长度是否小于 16
+        if (id.length() < 3 || id.length() >= 16) {
+            return false;
+        }
+
+        // 检查字符串是否仅包含英文字母、数字和下划线
+        return id.matches("^[a-zA-Z0-9_]+$");
+    }
+
     @GetMapping("create-transaction")
     public RedirectView createTransaction(@RequestParam("productUuid") String productUuid,
                                           @RequestParam("amount") int amount,
@@ -43,7 +54,7 @@ public class TransactionController {
                                           @RequestParam("minecraftId") String minecraftId) {
         Product product = this.productService.findProductByUuid(UUID.fromString(productUuid));
         if (validateMinecraftId(minecraftId)) {
-            Transaction transaction = new Transaction(product, product.getPrice() * amount, minecraftId);
+            Transaction transaction = new Transaction(product, amount, product.getPrice() * amount, minecraftId);
             this.transactionService.saveTransaction(transaction);
             return new RedirectView(this.apiAdapter.getPayLink(transaction.getTransactionId(), paymentMethod, product.getName(), transaction.getAmount()));
         } else {
@@ -51,17 +62,22 @@ public class TransactionController {
         }
     }
 
+    @GetMapping("query-transaction")
+    public String queryTransaction(Model model, @RequestParam("transaction_id") String transactionId) {
+        model.addAttribute("transaction", this.transactionService.findTransactionByTransactionId(transactionId));
+        return "query-transaction";
+    }
+
     @GetMapping("complete-transaction")
-    public String completeTransaction(Model model,
-                                      @RequestParam("pid") String pid,
-                                      @RequestParam("trade_no") String trade_no,
-                                      @RequestParam("out_trade_no") String transactionId,
-                                      @RequestParam("type") String type,
-                                      @RequestParam("name") String name,
-                                      @RequestParam("money") String money,
-                                      @RequestParam("trade_status") String trade_status,
-                                      @RequestParam("sign") String sign,
-                                      @RequestParam("sign_type") String sign_type) {
+    public RedirectView completeTransaction(@RequestParam("pid") String pid,
+                                            @RequestParam("trade_no") String trade_no,
+                                            @RequestParam("out_trade_no") String transactionId,
+                                            @RequestParam("type") String type,
+                                            @RequestParam("name") String name,
+                                            @RequestParam("money") String money,
+                                            @RequestParam("trade_status") String trade_status,
+                                            @RequestParam("sign") String sign,
+                                            @RequestParam("sign_type") String sign_type) {
         Map<String, String> params = new TreeMap<>();
         params.put("pid", pid);
         params.put("trade_no", trade_no);
@@ -72,8 +88,7 @@ public class TransactionController {
         params.put("trade_status", trade_status);
         Transaction transaction = this.transactionService.findTransactionByTransactionId(transactionId);
         processTransaction(transaction, sign_type, sign, trade_status, params);
-        model.addAttribute("transaction", transaction);
-        return "complete-transaction";
+        return new RedirectView("/query-transaction" + UriComponentsBuilder.newInstance().queryParam("transaction_id", transactionId).encode().toUriString());
     }
 
     @GetMapping("update-transaction")
@@ -99,17 +114,7 @@ public class TransactionController {
         return ResponseEntity.status(HttpStatus.NO_CONTENT).body(null);
     }
 
-    public static boolean validateMinecraftId(String id) {
-        // 检查字符串长度是否小于 16
-        if (id.length() < 3 || id.length() >= 16) {
-            return false;
-        }
-
-        // 检查字符串是否仅包含英文字母、数字和下划线
-        return id.matches("^[a-zA-Z0-9_]+$");
-    }
-
-    private void processTransaction(Transaction transaction, String sign_type, String sign, String trade_status, Map<String, String>params) {
+    private void processTransaction(Transaction transaction, String sign_type, String sign, String trade_status, Map<String, String> params) {
         if (transaction.getStatus() == TransactionStatus.PENDING) {
             if (!sign_type.equalsIgnoreCase("md5") || !sign.equals(ApiAdapter.getSign(params, configurablePropertyService.findPropertyByName("key").value))) {
                 transaction.setStatus(TransactionStatus.ERROR);
@@ -118,8 +123,9 @@ public class TransactionController {
                     transaction.setStatus(TransactionStatus.FAILED);
                 } else {
                     try {
-                        Action action = new Action(configurablePropertyService.findPropertyByName("remote_uuid").value, configurablePropertyService.findPropertyByName("uuid").value, transaction.getProduct().getAction());
-                        action.buildCommand(transaction.getMinecraftId());
+                        Product product = transaction.getProduct();
+                        Action action = new Action(product.getMcsmRemoteUuid(), product.getMcsmUuid(), product.getActionPayload());
+                        action.buildCommand(transaction.getMinecraftId(), transaction.getProductAmount());
                         this.apiAdapter.executeCommand(action);
                         transaction.setStatus(TransactionStatus.SUCCESS);
                     } catch (Exception e) {

@@ -14,7 +14,9 @@ public class Product {
     private UUID uuid;
     private String name;
     private double price;
-    private String action;
+    private String actionPayload;
+    private String mcsmRemoteUuid;
+    private String mcsmUuid;
 
     public Product() {
     }
@@ -36,7 +38,15 @@ public class Product {
         return uuid;
     }
 
-    public String getAction() {
-        return action;
+    public String getActionPayload() {
+        return actionPayload;
+    }
+
+    public String getMcsmRemoteUuid() {
+        return mcsmRemoteUuid;
+    }
+
+    public String getMcsmUuid() {
+        return mcsmUuid;
     }
 }

@@ -11,6 +11,7 @@ public class Transaction {
     private String transactionId;
     @ManyToOne
     private Product product;
+    private int productAmount;
     private double amount;
     @Enumerated(EnumType.STRING)
     private TransactionStatus status;
@@ -19,8 +20,9 @@ public class Transaction {
     public Transaction() {
     }
 
-    public Transaction(Product product, double amount, String minecraftId) {
+    public Transaction(Product product, int productAmount, double amount, String minecraftId) {
         this.product = product;
+        this.productAmount = productAmount;
         this.amount = amount;
         this.minecraftId = minecraftId;
         this.status = TransactionStatus.PENDING;
@@ -32,6 +34,10 @@ public class Transaction {
 
     public String getTransactionId() {
         return transactionId;
+    }
+
+    public int getProductAmount() {
+        return productAmount;
     }
 
     public Product getProduct() {
